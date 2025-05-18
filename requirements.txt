@@ -1,4 +1,6 @@
 simpy
 numpy
 tabulate
-matplotlib 
+matplotlib
+streamlit
+pandas 
