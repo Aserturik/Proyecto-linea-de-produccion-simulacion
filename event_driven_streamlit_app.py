@@ -1,24 +1,23 @@
 import streamlit as st
 import pandas as pd
-import numpy as np # Required by index.py or its submodules
+import numpy as np
+from event_driven_simulation import SimulacionLineaProduccion
 
-# Import the simulation function and defaults from index.py
-# Ensure index.py is in the same directory or Python path
-try:
-    from index import run_simulation, DEFAULT_SIM_TIME, DEFAULT_BUFFER1_CAPACITY, \
-                      DEFAULT_BUFFER2_CAPACITY, DEFAULT_M1_MEAN_TIME, \
-                      DEFAULT_M2_MEAN_TIME, DEFAULT_M3_MEAN_TIME, \
-                      DEFAULT_DEFECT_PROB, DEFAULT_RANDOM_SEED
-except ImportError as e:
-    st.error(f"Error importing from index.py: {e}")
-    st.error("Asegúrate de que 'index.py' esté en el mismo directorio que 'streamlit_app.py'.")
-    st.stop()
+# Default simulation parameters
+DEFAULT_SIM_TIME = 24 * 60  # 24 horas en minutos
+DEFAULT_BUFFER1_CAPACITY = 1000 * 50  # 1000 cajas de 50 caramelos
+DEFAULT_BUFFER2_CAPACITY = 1000  # 1000 cajas
+DEFAULT_M1_MEAN_TIME = 2.0  # minutos por caramelo
+DEFAULT_M2_MEAN_TIME = 30.0  # minutos por caja de 50 caramelos
+DEFAULT_M3_MEAN_TIME = 15.0  # minutos por caja
+DEFAULT_DEFECT_PROB = 0.02  # 2% de defectos
+DEFAULT_RANDOM_SEED = 12345
 
 st.set_page_config(layout="wide")
 
-st.title("🏭 Simulación de Línea de Producción de Caramelos")
+st.title("🏭 Simulación de Línea de Producción de Caramelos (Event-Driven)")
 st.markdown("""
-Esta aplicación permite simular una línea de producción de caramelos y visualizar sus métricas de rendimiento.
+Esta aplicación permite simular una línea de producción de caramelos usando un enfoque basado en eventos.
 Ajusta los parámetros de la simulación en la barra lateral y haz clic en 'Ejecutar Simulación'.
 """)
 
@@ -41,16 +40,19 @@ random_seed = st.sidebar.number_input("Semilla Aleatoria", min_value=0, value=DE
 if st.sidebar.button("🚀 Ejecutar Simulación"):
     st.info(f"Ejecutando simulación con semilla {random_seed} por {sim_time} minutos...")
     
-    results = run_simulation(
-        sim_time_param=sim_time,
-        buffer1_cap_param=buffer1_capacity,
-        buffer2_cap_param=buffer2_capacity,
-        m1_mean_time_param=m1_mean_time,
-        m2_mean_time_param=m2_mean_time,
-        m3_mean_time_param=m3_mean_time,
-        defect_prob_param=defect_prob,
-        random_seed_param=random_seed
+    # Crear y ejecutar simulación
+    simulacion = SimulacionLineaProduccion(
+        sim_time=sim_time,
+        buffer1_capacity=buffer1_capacity,
+        buffer2_capacity=buffer2_capacity,
+        m1_mean_time=m1_mean_time,
+        m2_mean_time=m2_mean_time,
+        m3_mean_time=m3_mean_time,
+        defect_prob=defect_prob,
+        random_seed=random_seed
     )
+    
+    results = simulacion.ejecutar_simulacion()
 
     if results:
         st.success("✅ Simulación Finalizada!")
@@ -96,7 +98,7 @@ if st.sidebar.button("🚀 Ejecutar Simulación"):
             st.caption("No hay datos de WIP para Buffer 2.")
 
         with st.expander("📋 Ver Estadísticas Detalladas (Diccionario Completo)"):
-            st.json(results) # Display the full results dictionary
+            st.json(results)
 
     else:
         st.error("❌ La simulación falló o no devolvió resultados.")
@@ -104,4 +106,4 @@ else:
     st.info("Ajusta los parámetros en la barra lateral y haz clic en 'Ejecutar Simulación' para comenzar.")
 
 st.sidebar.markdown("---" * 3)
-st.sidebar.markdown("Creado con [Streamlit](https://streamlit.io) y SimPy.") 
+st.sidebar.markdown("Creado con [Streamlit](https://streamlit.io) y Simulación Event-Driven.") 
