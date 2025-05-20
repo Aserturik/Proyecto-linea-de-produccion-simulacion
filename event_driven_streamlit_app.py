@@ -1,6 +1,8 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 from event_driven_simulation import SimulacionLineaProduccion
 
 # Default simulation parameters
@@ -59,6 +61,7 @@ if st.sidebar.button("🚀 Ejecutar Simulación"):
         
         st.header("📊 Resultados de la Simulación")
         
+        # Métricas principales en columnas
         col1, col2, col3 = st.columns(3)
         col1.metric("🍬 Caramelos Producidos (M1)", results.get('producidos_m1', 0))
         col1.metric("🚫 Caramelos Defectuosos (M1)", results.get('defectos_m1', 0))
@@ -77,25 +80,95 @@ if st.sidebar.button("🚀 Ejecutar Simulación"):
         col3.metric("📈 WIP Prom. Buffer 1 (caramelos)", f"{results.get('avg_wip_buffer1', 0):.2f}")
         col3.metric("📉 WIP Prom. Buffer 2 (cajas)", f"{results.get('avg_wip_buffer2', 0):.2f}")
 
-        st.subheader("Inventario en Proceso (WIP) a lo Largo del Tiempo")
+        # Gráficos mejorados con Plotly
+        st.header("📈 Visualizaciones del Sistema")
+
+        # 1. WIP a lo largo del tiempo (subplots)
+        fig_wip = make_subplots(rows=2, cols=1, 
+                               subplot_titles=("Nivel de Buffer 1 (Caramelos)", 
+                                             "Nivel de Buffer 2 (Cajas)"),
+                               vertical_spacing=0.1)
         
         # WIP Buffer 1
         wip_b1_data = results.get('wip_buffer1_data', [])
         if wip_b1_data:
-            df_wip_b1 = pd.DataFrame(wip_b1_data, columns=['Tiempo', 'Nivel Buffer 1'])
-            df_wip_b1.set_index('Tiempo', inplace=True)
-            st.line_chart(df_wip_b1['Nivel Buffer 1'])
-        else:
-            st.caption("No hay datos de WIP para Buffer 1.")
-
+            df_wip_b1 = pd.DataFrame(wip_b1_data, columns=['Tiempo', 'Nivel'])
+            fig_wip.add_trace(
+                go.Scatter(x=df_wip_b1['Tiempo'], y=df_wip_b1['Nivel'],
+                          name='Buffer 1', line=dict(color='blue')),
+                row=1, col=1
+            )
+            fig_wip.update_yaxes(title_text="Cantidad de Caramelos", row=1, col=1)
+        
         # WIP Buffer 2
         wip_b2_data = results.get('wip_buffer2_data', [])
         if wip_b2_data:
-            df_wip_b2 = pd.DataFrame(wip_b2_data, columns=['Tiempo', 'Nivel Buffer 2'])
-            df_wip_b2.set_index('Tiempo', inplace=True)
-            st.line_chart(df_wip_b2['Nivel Buffer 2'])
-        else:
-            st.caption("No hay datos de WIP para Buffer 2.")
+            df_wip_b2 = pd.DataFrame(wip_b2_data, columns=['Tiempo', 'Nivel'])
+            fig_wip.add_trace(
+                go.Scatter(x=df_wip_b2['Tiempo'], y=df_wip_b2['Nivel'],
+                          name='Buffer 2', line=dict(color='green')),
+                row=2, col=1
+            )
+            fig_wip.update_yaxes(title_text="Cantidad de Cajas", row=2, col=1)
+        
+        fig_wip.update_xaxes(title_text="Tiempo (minutos)", row=2, col=1)
+        fig_wip.update_layout(height=600, showlegend=True)
+        st.plotly_chart(fig_wip, use_container_width=True)
+
+        # 2. Distribución de tiempos en sistema
+        tiempos_sistema = results.get('tiempos_sistema_caja', [])
+        if tiempos_sistema:
+            fig_tiempos = go.Figure()
+            fig_tiempos.add_trace(go.Histogram(
+                x=tiempos_sistema,
+                name='Tiempo en Sistema',
+                nbinsx=30,
+                marker_color='purple'
+            ))
+            fig_tiempos.update_layout(
+                title='Distribución de Tiempos en Sistema por Caja',
+                xaxis_title='Tiempo (minutos)',
+                yaxis_title='Frecuencia',
+                showlegend=True
+            )
+            st.plotly_chart(fig_tiempos, use_container_width=True)
+
+        # 3. Throughput acumulado
+        if wip_b2_data:
+            df_wip_b2 = pd.DataFrame(wip_b2_data, columns=['Tiempo', 'Nivel'])
+            df_wip_b2['Throughput_Acumulado'] = df_wip_b2['Nivel'].cumsum()
+            
+            fig_throughput = go.Figure()
+            fig_throughput.add_trace(go.Scatter(
+                x=df_wip_b2['Tiempo'],
+                y=df_wip_b2['Throughput_Acumulado'],
+                name='Throughput Acumulado',
+                line=dict(color='orange')
+            ))
+            fig_throughput.update_layout(
+                title='Throughput Acumulado del Sistema',
+                xaxis_title='Tiempo (minutos)',
+                yaxis_title='Cajas Procesadas',
+                showlegend=True
+            )
+            st.plotly_chart(fig_throughput, use_container_width=True)
+
+        # 4. Tasa de defectos
+        if results.get('producidos_m1', 0) > 0:
+            defectos = results.get('defectos_m1', 0)
+            buenos = results.get('caramelos_a_buffer1', 0)
+            
+            fig_defectos = go.Figure(data=[go.Pie(
+                labels=['Defectuosos', 'Buenos'],
+                values=[defectos, buenos],
+                hole=.3,
+                marker_colors=['red', 'green']
+            )])
+            fig_defectos.update_layout(
+                title='Distribución de Calidad de Caramelos',
+                showlegend=True
+            )
+            st.plotly_chart(fig_defectos, use_container_width=True)
 
         with st.expander("📋 Ver Estadísticas Detalladas (Diccionario Completo)"):
             st.json(results)
@@ -106,4 +179,4 @@ else:
     st.info("Ajusta los parámetros en la barra lateral y haz clic en 'Ejecutar Simulación' para comenzar.")
 
 st.sidebar.markdown("---" * 3)
-st.sidebar.markdown("Creado con [Streamlit](https://streamlit.io) y Simulación Event-Driven.") 
+st.sidebar.markdown("Creado con [Streamlit](https://streamlit.io) y [Plotly](https://plotly.com/python/).") 
