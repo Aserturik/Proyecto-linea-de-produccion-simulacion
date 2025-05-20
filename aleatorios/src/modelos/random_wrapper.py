@@ -2,8 +2,7 @@
 Módulo que provee una interfaz compatible con random usando nuestro generador validado.
 """
 from typing import Sequence, TypeVar, List, Any
-import math
-from .prng import PRNG
+
 from .linear_congruence import LinearCongruenceRandom
 
 T = TypeVar('T')
