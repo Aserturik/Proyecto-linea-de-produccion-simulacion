@@ -77,7 +77,8 @@ class SimulacionLineaProduccion:
             'acum_tiempo_cola1': 0.0,
             'acum_tiempo_cola2': 0.0,
             'acum_tiempo_cola3': 0.0,
-            'ultimo_cambio_wip': 0.0
+            'ultimo_cambio_wip': 0.0,
+            'defectos_m1_tiempo': [],  # Lista de tuplas (tiempo, acumulado de defectos)
         }
         
         # Generador de números aleatorios
@@ -152,7 +153,7 @@ class SimulacionLineaProduccion:
         item_procesado = self.item_en_m1
         self.item_en_m1 = None
         self.stats['producidos_m1'] += 1
-        
+
         # Verificar si el item es defectuoso
         if self.rng.random() > self.defect_prob:
             self.stats['caramelos_a_buffer1'] += 1
@@ -189,6 +190,7 @@ class SimulacionLineaProduccion:
                 self.item_en_m1 = item_procesado
         else:
             self.stats['defectos_m1'] += 1
+            self.stats['defectos_m1_tiempo'].append((self.reloj, self.stats['defectos_m1']))
             # Intentar procesar otro item de cola1
             if len(self.cola1) > 0:
                 item_de_cola1 = self.cola1.popleft()
