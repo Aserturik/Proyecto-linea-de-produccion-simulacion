@@ -169,6 +169,26 @@ if st.sidebar.button("🚀 Ejecutar Simulación"):
                 showlegend=True
             )
             st.plotly_chart(fig_defectos, use_container_width=True)
+        
+        # 5. Evolución de defectos acumulados
+        defectos_tiempo = results.get('defectos_m1_tiempo', [])
+        if defectos_tiempo:
+            df_defectos = pd.DataFrame(defectos_tiempo, columns=["Tiempo", "Defectos Acumulados"])
+            fig_defectos_acum = go.Figure()
+            fig_defectos_acum.add_trace(go.Scatter(
+                x=df_defectos["Tiempo"],
+                y=df_defectos["Defectos Acumulados"],
+                mode='lines+markers',
+                name="Defectos acumulados",
+                line=dict(color='red')
+            ))
+            fig_defectos_acum.update_layout(
+                title="Evolución Temporal de Defectos",
+                xaxis_title="Tiempo (minutos)",
+                yaxis_title="Número Acumulado de Defectos"
+            )
+            st.plotly_chart(fig_defectos_acum, use_container_width=True)
+
 
         with st.expander("📋 Ver Estadísticas Detalladas (Diccionario Completo)"):
             st.json(results)
