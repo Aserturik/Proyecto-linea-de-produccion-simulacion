@@ -34,50 +34,7 @@ Ajusta los parámetros de la simulación en la barra lateral y haz clic en 'Ejec
 # Sidebar for parameters
 st.sidebar.header("⚙️ Parámetros de Simulación")
 
-sim_time = st.sidebar.number_input(
-    "Tiempo de Simulación (minutos)", min_value=1, value=DEFAULT_SIM_TIME, step=60)
-buffer1_capacity = st.sidebar.number_input(
-    "Capacidad Buffer 1 (caramelos)", min_value=1, value=DEFAULT_BUFFER1_CAPACITY, step=100)
-buffer2_capacity = st.sidebar.number_input(
-    "Capacidad Buffer 2 (cajas)", min_value=1, value=DEFAULT_BUFFER2_CAPACITY, step=10)
-
-st.sidebar.subheader("Parámetros de Tiempos de Proceso (Distribución Normal)")
-
-# --- Máquina 1 ---
-st.sidebar.markdown("---")
-st.sidebar.markdown("**Máquina 1 (Producción Caramelos)**")
-m1_media_tiempo = st.sidebar.number_input("M1: Media Tiempo Proceso (min/caramelo)",
-                                          min_value=0.1, value=DEFAULT_M1_MEDIA_TIEMPO, step=0.1, format="%.2f", key="m1_media")
-m1_std_dev_tiempo = st.sidebar.number_input("M1: Desv. Est. Tiempo Proceso (min/caramelo)",
-                                            min_value=0.0, value=DEFAULT_M1_STD_DEV_TIEMPO, step=0.05, format="%.2f", key="m1_std")
-
-# --- Máquina 2 ---
-st.sidebar.markdown("---")
-st.sidebar.markdown("**Máquina 2 (Empaquetado Cajas)**")
-m2_media_tiempo = st.sidebar.number_input("M2: Media Tiempo Proceso (min/caja)",
-                                          min_value=0.1, value=DEFAULT_M2_MEDIA_TIEMPO, step=0.1, format="%.2f", key="m2_media")
-m2_std_dev_tiempo = st.sidebar.number_input("M2: Desv. Est. Tiempo Proceso (min/caja)",
-                                            min_value=0.0, value=DEFAULT_M2_STD_DEV_TIEMPO, step=0.1, format="%.2f", key="m2_std")
-
-# --- Máquina 3 ---
-st.sidebar.markdown("---")
-st.sidebar.markdown("**Máquina 3 (Sellado Cajas)**")
-m3_media_tiempo = st.sidebar.number_input("M3: Media Tiempo Proceso (min/caja)",
-                                          min_value=0.1, value=DEFAULT_M3_MEDIA_TIEMPO, step=0.1, format="%.2f", key="m3_media")
-m3_std_dev_tiempo = st.sidebar.number_input("M3: Desv. Est. Tiempo Proceso (min/caja)",
-                                            min_value=0.0, value=DEFAULT_M3_STD_DEV_TIEMPO, step=0.1, format="%.2f", key="m3_std")
-st.sidebar.markdown("---")
-
-
-defect_prob = st.sidebar.slider("Probabilidad de Defecto en M1", min_value=0.0,
-                                max_value=1.0, value=DEFAULT_DEFECT_PROB, step=0.001, format="%.3f")
-random_seed = st.sidebar.number_input(
-    "Semilla Aleatoria", min_value=0, value=DEFAULT_RANDOM_SEED, step=1)
-
-# Visualización de las campanas de Gauss
-st.sidebar.header("🔔 Visualización de Distribuciones")
-
-
+# Función para generar gráficas de distribución normal
 def plot_normal_distribution(mean, std_dev, title):
     if std_dev <= 0:  # La desviación estándar no puede ser cero o negativa para la gráfica
         st.sidebar.warning(
@@ -104,14 +61,88 @@ def plot_normal_distribution(mean, std_dev, title):
     )
     return fig
 
+sim_time = st.sidebar.number_input(
+    "Tiempo de Simulación (minutos)", min_value=1, value=DEFAULT_SIM_TIME, step=60)
+buffer1_capacity = st.sidebar.number_input(
+    "Capacidad Buffer 1 (caramelos)", min_value=1, value=DEFAULT_BUFFER1_CAPACITY, step=100)
+buffer2_capacity = st.sidebar.number_input(
+    "Capacidad Buffer 2 (cajas)", min_value=1, value=DEFAULT_BUFFER2_CAPACITY, step=10)
 
-st.sidebar.plotly_chart(plot_normal_distribution(
-    m1_media_tiempo, m1_std_dev_tiempo, "Distribución M1"), use_container_width=True)
-st.sidebar.plotly_chart(plot_normal_distribution(
-    m2_media_tiempo, m2_std_dev_tiempo, "Distribución M2"), use_container_width=True)
-st.sidebar.plotly_chart(plot_normal_distribution(
-    m3_media_tiempo, m3_std_dev_tiempo, "Distribución M3"), use_container_width=True)
+st.sidebar.subheader("Parámetros de Tiempos de Proceso (Distribución Normal)")
 
+# --- Máquina 1 ---
+st.sidebar.markdown("---")
+st.sidebar.markdown("**Máquina 1 (Producción Caramelos)**")
+m1_media_tiempo = st.sidebar.number_input("M1: Media Tiempo Proceso (min/caramelo)",
+                                          min_value=0.1, value=DEFAULT_M1_MEDIA_TIEMPO, step=0.1, format="%.2f", key="m1_media")
+m1_std_dev_tiempo = st.sidebar.number_input("M1: Desv. Est. Tiempo Proceso (min/caramelo)",
+                                            min_value=0.0, value=DEFAULT_M1_STD_DEV_TIEMPO, step=0.05, format="%.2f", key="m1_std")
+
+# Gráfica de distribución para M1
+st.sidebar.plotly_chart(plot_normal_distribution(
+    m1_media_tiempo, m1_std_dev_tiempo, "Distribución Normal M1"), use_container_width=True)
+
+# --- Máquina 2 ---
+st.sidebar.markdown("---")
+st.sidebar.markdown("**Máquina 2 (Empaquetado Cajas)**")
+m2_media_tiempo = st.sidebar.number_input("M2: Media Tiempo Proceso (min/caja)",
+                                          min_value=0.1, value=DEFAULT_M2_MEDIA_TIEMPO, step=0.1, format="%.2f", key="m2_media")
+m2_std_dev_tiempo = st.sidebar.number_input("M2: Desv. Est. Tiempo Proceso (min/caja)",
+                                            min_value=0.0, value=DEFAULT_M2_STD_DEV_TIEMPO, step=0.1, format="%.2f", key="m2_std")
+
+# Gráfica de distribución para M2
+st.sidebar.plotly_chart(plot_normal_distribution(
+    m2_media_tiempo, m2_std_dev_tiempo, "Distribución Normal M2"), use_container_width=True)
+
+# --- Máquina 3 ---
+st.sidebar.markdown("---")
+st.sidebar.markdown("**Máquina 3 (Sellado Cajas)**")
+m3_media_tiempo = st.sidebar.number_input("M3: Media Tiempo Proceso (min/caja)",
+                                          min_value=0.1, value=DEFAULT_M3_MEDIA_TIEMPO, step=0.1, format="%.2f", key="m3_media")
+m3_std_dev_tiempo = st.sidebar.number_input("M3: Desv. Est. Tiempo Proceso (min/caja)",
+                                            min_value=0.0, value=DEFAULT_M3_STD_DEV_TIEMPO, step=0.1, format="%.2f", key="m3_std")
+
+# Gráfica de distribución para M3
+st.sidebar.plotly_chart(plot_normal_distribution(
+    m3_media_tiempo, m3_std_dev_tiempo, "Distribución Normal M3"), use_container_width=True)
+st.sidebar.markdown("---")
+
+
+defect_prob = st.sidebar.slider("Probabilidad de Defecto en M1", min_value=0.0,
+                                max_value=1.0, value=DEFAULT_DEFECT_PROB, step=0.001, format="%.3f")
+random_seed = st.sidebar.number_input(
+    "Semilla Aleatoria", min_value=0, value=DEFAULT_RANDOM_SEED, step=1)
+
+# Visualización de la distribución de Bernoulli
+st.sidebar.header("🎲 Distribución de Bernoulli (Defectos)")
+
+# Sección explicativa sobre Bernoulli
+st.sidebar.markdown(f"""
+**Uso en la simulación:** La distribución de Bernoulli se utiliza en la **Máquina 1 (M1)** para determinar si un caramelo producido es defectuoso o no.
+
+**Parámetro actual:** p = {defect_prob:.3f}
+""")
+
+# Gráfica simple de Bernoulli
+def plot_bernoulli_distribution(p):
+    fig = go.Figure()
+    fig.add_trace(go.Bar(
+        x=['Bueno', 'Defectuoso'],
+        y=[1-p, p],
+        marker_color=['green', 'red'],
+        name='Probabilidad'
+    ))
+    fig.update_layout(
+        title=f"Distribución de Bernoulli (p = {p:.3f})",
+        xaxis_title="Resultado",
+        yaxis_title="Probabilidad",
+        height=250,
+        margin=dict(l=20, r=20, t=40, b=20),
+        showlegend=False
+    )
+    return fig
+
+st.sidebar.plotly_chart(plot_bernoulli_distribution(defect_prob), use_container_width=True)
 
 # Run simulation button
 if st.sidebar.button("🚀 Ejecutar Simulación"):
@@ -201,27 +232,9 @@ if st.sidebar.button("🚀 Ejecutar Simulación"):
         fig_wip.update_layout(height=600, showlegend=True)
         st.plotly_chart(fig_wip, use_container_width=True)
 
-        # 2. Distribución de tiempos en sistema
-        tiempos_sistema = results.get('tiempos_sistema_caja', [])
-        if tiempos_sistema:
-            fig_tiempos = go.Figure()
-            fig_tiempos.add_trace(go.Histogram(
-                x=tiempos_sistema,
-                name='Tiempo en Sistema',
-                nbinsx=30,
-                marker_color='purple'
-            ))
-            fig_tiempos.update_layout(
-                title='Distribución de Tiempos en Sistema por Caja',
-                xaxis_title='Tiempo (minutos)',
-                yaxis_title='Frecuencia',
-                showlegend=False  # Era True, pero con un solo trace no es tan necesario
-            )
-            st.plotly_chart(fig_tiempos, use_container_width=True)
-
         # --- GRÁFICAS REINCORPORADAS ---
 
-        # 3. Throughput Acumulado (Cajas Selladas M3) - VERSIÓN MEJORADA
+        # 2. Throughput Acumulado (Cajas Selladas M3) - VERSIÓN MEJORADA
         cajas_selladas_tiempo_data = results.get(
             'cajas_selladas_m3_tiempo', [])
         if cajas_selladas_tiempo_data:
@@ -252,7 +265,7 @@ if st.sidebar.button("🚀 Ejecutar Simulación"):
             st.markdown(
                 "_(No hay datos de throughput acumulado para mostrar: ninguna caja sellada o datos no registrados)._")
 
-        # 4. Evolución de defectos acumulados
+        # 3. Evolución de defectos acumulados
         defectos_tiempo = results.get('defectos_m1_tiempo', [])
         if defectos_tiempo:
             df_defectos = pd.DataFrame(defectos_tiempo, columns=[
