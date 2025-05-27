@@ -252,34 +252,7 @@ if st.sidebar.button("🚀 Ejecutar Simulación"):
             st.markdown(
                 "_(No hay datos de throughput acumulado para mostrar: ninguna caja sellada o datos no registrados)._")
 
-        # 4. Tasa de defectos (Pie chart)
-        if results.get('producidos_m1', 0) > 0:
-            defectos = results.get('defectos_m1', 0)
-            # Caramelos que pasaron M1 y no fueron defectuosos
-            buenos = results.get('caramelos_a_buffer1', 0)
-
-            # Si no hay ni buenos ni defectuosos (aunque producidos_m1 > 0), para evitar error en Pie
-            if (defectos + buenos) > 0:
-                fig_defectos_pie = go.Figure(data=[go.Pie(
-                    labels=['Defectuosos', 'Buenos'],
-                    values=[defectos, buenos],
-                    hole=.3,
-                    # Cambiado a lime para mejor contraste
-                    marker_colors=['red', 'lime']
-                )])
-                fig_defectos_pie.update_layout(
-                    title='Distribución de Calidad de Caramelos Producidos por M1',
-                    showlegend=True
-                )
-                st.plotly_chart(fig_defectos_pie, use_container_width=True)
-            else:
-                st.markdown(
-                    "_(No hay caramelos buenos o defectuosos registrados para el gráfico de pastel, aunque M1 procesó items)._")
-        else:
-            st.markdown(
-                "_(M1 no produjo caramelos, no se muestra gráfico de calidad)._")
-
-        # 5. Evolución de defectos acumulados (Ya estaba, se mantiene)
+        # 4. Evolución de defectos acumulados
         defectos_tiempo = results.get('defectos_m1_tiempo', [])
         if defectos_tiempo:
             df_defectos = pd.DataFrame(defectos_tiempo, columns=[
