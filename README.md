@@ -132,6 +132,7 @@ La simulación se ejecutará con los parámetros por defecto definidos en `event
     * Intentos de producción de caramelos (M1).
     * Caramelos defectuosos (M1).
     * Caramelos buenos enviados a Buffer1.
+    * Caramelos defectuosos (Defecto por minuto)
     * Cajas empaquetadas (M2).
     * Cajas selladas (M3).
     * Throughput (cajas selladas por minuto).
