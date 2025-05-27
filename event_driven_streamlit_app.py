@@ -3,16 +3,23 @@ import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
+from scipy.stats import norm # Para la PDF de la distribución normal
 from event_driven_simulation import SimulacionLineaProduccion
 
 # Default simulation parameters
 DEFAULT_SIM_TIME = 24 * 60  # 24 horas en minutos
-DEFAULT_BUFFER1_CAPACITY = 1000 * 50  # 1000 cajas de 50 caramelos
-DEFAULT_BUFFER2_CAPACITY = 1000  # 1000 cajas
-DEFAULT_M1_MEAN_TIME = 2.0  # minutos por caramelo
-DEFAULT_M2_MEAN_TIME = 30.0  # minutos por caja de 50 caramelos
-DEFAULT_M3_MEAN_TIME = 15.0  # minutos por caja
-DEFAULT_DEFECT_PROB = 0.02  # 2% de defectos
+DEFAULT_BUFFER1_CAPACITY = 1000 * 50
+DEFAULT_BUFFER2_CAPACITY = 1000
+
+# Parámetros para Distribución Normal por defecto
+DEFAULT_M1_MEDIA_TIEMPO = 2.0  # minutos por caramelo
+DEFAULT_M1_STD_DEV_TIEMPO = 0.5 # minutos
+DEFAULT_M2_MEDIA_TIEMPO = 30.0 # minutos por caja
+DEFAULT_M2_STD_DEV_TIEMPO = 5.0  # minutos
+DEFAULT_M3_MEDIA_TIEMPO = 15.0 # minutos por caja
+DEFAULT_M3_STD_DEV_TIEMPO = 3.0  # minutos
+
+DEFAULT_DEFECT_PROB = 0.02
 DEFAULT_RANDOM_SEED = 12345
 
 st.set_page_config(layout="wide")
@@ -20,6 +27,7 @@ st.set_page_config(layout="wide")
 st.title("🏭 Simulación de Línea de Producción de Caramelos (Event-Driven)")
 st.markdown("""
 Esta aplicación permite simular una línea de producción de caramelos usando un enfoque basado en eventos.
+Los tiempos de proceso de las máquinas ahora siguen una **Distribución Normal**.
 Ajusta los parámetros de la simulación en la barra lateral y haz clic en 'Ejecutar Simulación'.
 """)
 
@@ -30,30 +38,81 @@ sim_time = st.sidebar.number_input("Tiempo de Simulación (minutos)", min_value=
 buffer1_capacity = st.sidebar.number_input("Capacidad Buffer 1 (caramelos)", min_value=1, value=DEFAULT_BUFFER1_CAPACITY, step=100)
 buffer2_capacity = st.sidebar.number_input("Capacidad Buffer 2 (cajas)", min_value=1, value=DEFAULT_BUFFER2_CAPACITY, step=10)
 
-st.sidebar.subheader("Tiempos Medios de Procesamiento (minutos)")
-m1_mean_time = st.sidebar.number_input("M1 (por caramelo)", min_value=0.1, value=DEFAULT_M1_MEAN_TIME, step=0.1, format="%.2f")
-m2_mean_time = st.sidebar.number_input("M2 (por caja de 50 caramelos)", min_value=1.0, value=DEFAULT_M2_MEAN_TIME, step=1.0, format="%.2f")
-m3_mean_time = st.sidebar.number_input("M3 (por caja)", min_value=1.0, value=DEFAULT_M3_MEAN_TIME, step=1.0, format="%.2f")
+st.sidebar.subheader("Parámetros de Tiempos de Proceso (Distribución Normal)")
+
+# --- Máquina 1 ---
+st.sidebar.markdown("---")
+st.sidebar.markdown("**Máquina 1 (Producción Caramelos)**")
+m1_media_tiempo = st.sidebar.number_input("M1: Media Tiempo Proceso (min/caramelo)", min_value=0.1, value=DEFAULT_M1_MEDIA_TIEMPO, step=0.1, format="%.2f", key="m1_media")
+m1_std_dev_tiempo = st.sidebar.number_input("M1: Desv. Est. Tiempo Proceso (min/caramelo)", min_value=0.0, value=DEFAULT_M1_STD_DEV_TIEMPO, step=0.05, format="%.2f", key="m1_std")
+
+# --- Máquina 2 ---
+st.sidebar.markdown("---")
+st.sidebar.markdown("**Máquina 2 (Empaquetado Cajas)**")
+m2_media_tiempo = st.sidebar.number_input("M2: Media Tiempo Proceso (min/caja)", min_value=0.1, value=DEFAULT_M2_MEDIA_TIEMPO, step=0.1, format="%.2f", key="m2_media")
+m2_std_dev_tiempo = st.sidebar.number_input("M2: Desv. Est. Tiempo Proceso (min/caja)", min_value=0.0, value=DEFAULT_M2_STD_DEV_TIEMPO, step=0.1, format="%.2f", key="m2_std")
+
+# --- Máquina 3 ---
+st.sidebar.markdown("---")
+st.sidebar.markdown("**Máquina 3 (Sellado Cajas)**")
+m3_media_tiempo = st.sidebar.number_input("M3: Media Tiempo Proceso (min/caja)", min_value=0.1, value=DEFAULT_M3_MEDIA_TIEMPO, step=0.1, format="%.2f", key="m3_media")
+m3_std_dev_tiempo = st.sidebar.number_input("M3: Desv. Est. Tiempo Proceso (min/caja)", min_value=0.0, value=DEFAULT_M3_STD_DEV_TIEMPO, step=0.1, format="%.2f", key="m3_std")
+st.sidebar.markdown("---")
+
 
 defect_prob = st.sidebar.slider("Probabilidad de Defecto en M1", min_value=0.0, max_value=1.0, value=DEFAULT_DEFECT_PROB, step=0.001, format="%.3f")
 random_seed = st.sidebar.number_input("Semilla Aleatoria", min_value=0, value=DEFAULT_RANDOM_SEED, step=1)
 
+# Visualización de las campanas de Gauss
+st.sidebar.header("🔔 Visualización de Distribuciones")
+
+def plot_normal_distribution(mean, std_dev, title):
+    if std_dev <= 0: # La desviación estándar no puede ser cero o negativa para la gráfica
+        st.sidebar.warning(f"{title}: La desviación estándar debe ser > 0 para graficar.")
+        fig = go.Figure() # Figura vacía
+        fig.update_layout(title=title, height=200, showlegend=False)
+        return fig
+
+    x_min = mean - 4 * std_dev
+    x_max = mean + 4 * std_dev
+    x = np.linspace(max(0, x_min), x_max, 200) # Asegurar que x no sea negativo si media es pequeña
+    y = norm.pdf(x, mean, std_dev)
+    
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(x=x, y=y, mode='lines', name='PDF'))
+    fig.update_layout(
+        title=title,
+        xaxis_title="Tiempo de Proceso (min)",
+        yaxis_title="Densidad de Probabilidad",
+        height=250,
+        margin=dict(l=20, r=20, t=40, b=20),
+        showlegend=False
+    )
+    return fig
+
+st.sidebar.plotly_chart(plot_normal_distribution(m1_media_tiempo, m1_std_dev_tiempo, "Distribución M1"), use_container_width=True)
+st.sidebar.plotly_chart(plot_normal_distribution(m2_media_tiempo, m2_std_dev_tiempo, "Distribución M2"), use_container_width=True)
+st.sidebar.plotly_chart(plot_normal_distribution(m3_media_tiempo, m3_std_dev_tiempo, "Distribución M3"), use_container_width=True)
+
+
 # Run simulation button
 if st.sidebar.button("🚀 Ejecutar Simulación"):
-    st.info(f"Ejecutando simulación con semilla {random_seed} por {sim_time} minutos...")
-    
-    # Crear y ejecutar simulación
+    st.info(f"Ejecutando simulación con semilla {random_seed} por {sim_time} minutos...") # Esta podría ser tu línea 100 aprox.
+
+    # ESTA ES LA LLAMADA CORRECTA Y DEBE ESTAR AQUÍ (aprox. línea 101 o 102 en adelante)
     simulacion = SimulacionLineaProduccion(
         sim_time=sim_time,
         buffer1_capacity=buffer1_capacity,
         buffer2_capacity=buffer2_capacity,
-        m1_mean_time=m1_mean_time,
-        m2_mean_time=m2_mean_time,
-        m3_mean_time=m3_mean_time,
+        m1_media_tiempo=m1_media_tiempo,
+        m1_std_dev_tiempo=m1_std_dev_tiempo,
+        m2_media_tiempo=m2_media_tiempo,
+        m2_std_dev_tiempo=m2_std_dev_tiempo,
+        m3_media_tiempo=m3_media_tiempo,
+        m3_std_dev_tiempo=m3_std_dev_tiempo,
         defect_prob=defect_prob,
         random_seed=random_seed
     )
-    
     results = simulacion.ejecutar_simulacion()
 
     if results:
@@ -63,7 +122,7 @@ if st.sidebar.button("🚀 Ejecutar Simulación"):
         
         # Métricas principales en columnas
         col1, col2, col3 = st.columns(3)
-        col1.metric("🍬 Caramelos Producidos (M1)", results.get('producidos_m1', 0))
+        col1.metric("🍬 Caramelos Procesados por M1", results.get('producidos_m1', 0))
         col1.metric("🚫 Caramelos Defectuosos (M1)", results.get('defectos_m1', 0))
         col1.metric("✅ Caramelos Buenos a Buffer1", results.get('caramelos_a_buffer1', 0))
         
@@ -80,7 +139,6 @@ if st.sidebar.button("🚀 Ejecutar Simulación"):
         col3.metric("📈 WIP Prom. Buffer 1 (caramelos)", f"{results.get('avg_wip_buffer1', 0):.2f}")
         col3.metric("📉 WIP Prom. Buffer 2 (cajas)", f"{results.get('avg_wip_buffer2', 0):.2f}")
 
-        # Gráficos mejorados con Plotly
         st.header("📈 Visualizaciones del Sistema")
 
         # 1. WIP a lo largo del tiempo (subplots)
@@ -89,7 +147,6 @@ if st.sidebar.button("🚀 Ejecutar Simulación"):
                                              "Nivel de Buffer 2 (Cajas)"),
                                vertical_spacing=0.1)
         
-        # WIP Buffer 1
         wip_b1_data = results.get('wip_buffer1_data', [])
         if wip_b1_data:
             df_wip_b1 = pd.DataFrame(wip_b1_data, columns=['Tiempo', 'Nivel'])
@@ -100,7 +157,6 @@ if st.sidebar.button("🚀 Ejecutar Simulación"):
             )
             fig_wip.update_yaxes(title_text="Cantidad de Caramelos", row=1, col=1)
         
-        # WIP Buffer 2
         wip_b2_data = results.get('wip_buffer2_data', [])
         if wip_b2_data:
             df_wip_b2 = pd.DataFrame(wip_b2_data, columns=['Tiempo', 'Nivel'])
@@ -129,67 +185,85 @@ if st.sidebar.button("🚀 Ejecutar Simulación"):
                 title='Distribución de Tiempos en Sistema por Caja',
                 xaxis_title='Tiempo (minutos)',
                 yaxis_title='Frecuencia',
-                showlegend=True
+                showlegend=False # Era True, pero con un solo trace no es tan necesario
             )
             st.plotly_chart(fig_tiempos, use_container_width=True)
 
-        # 3. Throughput acumulado
-        if wip_b2_data:
-            df_wip_b2 = pd.DataFrame(wip_b2_data, columns=['Tiempo', 'Nivel'])
-            df_wip_b2['Throughput_Acumulado'] = df_wip_b2['Nivel'].cumsum()
-            
-            fig_throughput = go.Figure()
-            fig_throughput.add_trace(go.Scatter(
-                x=df_wip_b2['Tiempo'],
-                y=df_wip_b2['Throughput_Acumulado'],
-                name='Throughput Acumulado',
+        # --- GRÁFICAS REINCORPORADAS ---
+
+        # 3. Throughput Acumulado (Cajas Selladas M3) - VERSIÓN MEJORADA
+        cajas_selladas_tiempo_data = results.get('cajas_selladas_m3_tiempo', [])
+        if cajas_selladas_tiempo_data:
+            df_throughput = pd.DataFrame(cajas_selladas_tiempo_data, columns=['Tiempo', 'Cajas Acumuladas'])
+            # Añadir un punto inicial en (0,0) si no existe para que la línea comience desde el origen.
+            if not (df_throughput['Tiempo'].iloc[0] == 0 and df_throughput['Cajas Acumuladas'].iloc[0] == 0):
+                 df_throughput = pd.concat([pd.DataFrame([{'Tiempo':0, 'Cajas Acumuladas':0}]), df_throughput], ignore_index=True)
+
+            fig_throughput_acum = go.Figure() # Nombre de variable diferente para evitar colisiones
+            fig_throughput_acum.add_trace(go.Scatter(
+                x=df_throughput['Tiempo'],
+                y=df_throughput['Cajas Acumuladas'],
+                mode='lines', # 'lines+markers' es otra opción
+                name='Cajas Selladas Acumuladas',
                 line=dict(color='orange')
             ))
-            fig_throughput.update_layout(
-                title='Throughput Acumulado del Sistema',
+            fig_throughput_acum.update_layout(
+                title='Throughput Acumulado del Sistema (Cajas Selladas por M3)',
                 xaxis_title='Tiempo (minutos)',
-                yaxis_title='Cajas Procesadas',
+                yaxis_title='Número Acumulado de Cajas Selladas',
                 showlegend=True
             )
-            st.plotly_chart(fig_throughput, use_container_width=True)
+            st.plotly_chart(fig_throughput_acum, use_container_width=True)
+        else:
+            st.markdown("_(No hay datos de throughput acumulado para mostrar: ninguna caja sellada o datos no registrados)._")
 
-        # 4. Tasa de defectos
+
+        # 4. Tasa de defectos (Pie chart)
         if results.get('producidos_m1', 0) > 0:
             defectos = results.get('defectos_m1', 0)
-            buenos = results.get('caramelos_a_buffer1', 0)
+            buenos = results.get('caramelos_a_buffer1', 0) # Caramelos que pasaron M1 y no fueron defectuosos
             
-            fig_defectos = go.Figure(data=[go.Pie(
-                labels=['Defectuosos', 'Buenos'],
-                values=[defectos, buenos],
-                hole=.3,
-                marker_colors=['red', 'green']
-            )])
-            fig_defectos.update_layout(
-                title='Distribución de Calidad de Caramelos',
-                showlegend=True
-            )
-            st.plotly_chart(fig_defectos, use_container_width=True)
+            # Si no hay ni buenos ni defectuosos (aunque producidos_m1 > 0), para evitar error en Pie
+            if (defectos + buenos) > 0:
+                fig_defectos_pie = go.Figure(data=[go.Pie(
+                    labels=['Defectuosos', 'Buenos'],
+                    values=[defectos, buenos],
+                    hole=.3,
+                    marker_colors=['red', 'lime'] # Cambiado a lime para mejor contraste
+                )])
+                fig_defectos_pie.update_layout(
+                    title='Distribución de Calidad de Caramelos Producidos por M1',
+                    showlegend=True
+                )
+                st.plotly_chart(fig_defectos_pie, use_container_width=True)
+            else:
+                 st.markdown("_(No hay caramelos buenos o defectuosos registrados para el gráfico de pastel, aunque M1 procesó items)._")
+        else:
+            st.markdown("_(M1 no produjo caramelos, no se muestra gráfico de calidad)._")
         
-        # 5. Evolución de defectos acumulados
+        # 5. Evolución de defectos acumulados (Ya estaba, se mantiene)
         defectos_tiempo = results.get('defectos_m1_tiempo', [])
         if defectos_tiempo:
             df_defectos = pd.DataFrame(defectos_tiempo, columns=["Tiempo", "Defectos Acumulados"])
+            if not (df_defectos['Tiempo'].iloc[0] == 0 and df_defectos['Defectos Acumulados'].iloc[0] == 0):
+                 df_defectos = pd.concat([pd.DataFrame([{'Tiempo':0, 'Defectos Acumulados':0}]), df_defectos], ignore_index=True)
+
             fig_defectos_acum = go.Figure()
             fig_defectos_acum.add_trace(go.Scatter(
                 x=df_defectos["Tiempo"],
                 y=df_defectos["Defectos Acumulados"],
-                mode='lines+markers',
+                mode='lines', # 'lines+markers' es otra opción
                 name="Defectos acumulados",
-                line=dict(color='red')
+                line=dict(color='crimson') # Color un poco diferente para distinguir
             ))
             fig_defectos_acum.update_layout(
-                title="Evolución Temporal de Defectos",
+                title="Evolución Temporal de Defectos Acumulados (M1)",
                 xaxis_title="Tiempo (minutos)",
                 yaxis_title="Número Acumulado de Defectos"
             )
             st.plotly_chart(fig_defectos_acum, use_container_width=True)
 
-
+        # Expander para estadísticas detalladas
         with st.expander("📋 Ver Estadísticas Detalladas (Diccionario Completo)"):
             st.json(results)
 
@@ -198,5 +272,6 @@ if st.sidebar.button("🚀 Ejecutar Simulación"):
 else:
     st.info("Ajusta los parámetros en la barra lateral y haz clic en 'Ejecutar Simulación' para comenzar.")
 
-st.sidebar.markdown("---" * 3)
-st.sidebar.markdown("Creado con [Streamlit](https://streamlit.io) y [Plotly](https://plotly.com/python/).") 
+
+st.sidebar.markdown("---")
+st.sidebar.markdown("Creado con [Streamlit](https://streamlit.io), [Plotly](https://plotly.com/python/) y [SciPy](https://scipy.org/).")
