@@ -173,20 +173,33 @@ if st.sidebar.button("🚀 Ejecutar Simulación"):
 
         # Métricas principales en columnas
         col1, col2, col3 = st.columns(3)
-        col1.metric("🍬 Caramelos Procesados por M1",
+        
+        # Columna 1: Producción de Caramelos (M1)
+        col1.metric("🍬 Caramelos Producidos por M1",
                     results.get('producidos_m1', 0))
-        col1.metric("🚫 Caramelos Defectuosos (M1)",
+        col1.metric("🚫 Caramelos Defectuosos",
                     results.get('defectos_m1', 0))
-        col1.metric("✅ Caramelos Buenos a Buffer1",
+        col1.metric("✅ Caramelos Buenos",
                     results.get('caramelos_a_buffer1', 0))
+        
+        # Mostrar eficiencia de M1
+        if results.get('producidos_m1', 0) > 0:
+            eficiencia_m1 = (1 - results.get('defectos_m1', 0) / results.get('producidos_m1', 1)) * 100
+            col1.metric("📊 Eficiencia M1", f"{eficiencia_m1:.1f}%")
 
+        # Columna 2: Procesamiento de Cajas (M2 y M3)
         col2.metric("📦 Cajas Empaquetadas (M2)",
                     results.get('cajas_empaquetadas_m2', 0))
         col2.metric("🏷️ Cajas Selladas (M3)",
                     results.get('cajas_selladas_m3', 0))
         col2.metric("⏱️ Throughput (cajas/min)",
-                    f"{results.get('throughput_cajas_min', 0):.3f}")
+                    f"{results.get('throughput_cajas_min', 0):.4f}")
+        
+        # Caramelos en acumulador (nueva métrica)
+        acumulador_final = len(simulacion.acumulador_caramelos) if hasattr(simulacion, 'acumulador_caramelos') else 0
+        col2.metric("🧮 Caramelos en Acumulador", acumulador_final)
 
+        # Columna 3: Tiempos y WIP
         tiempo_prom_caja = results.get('tiempo_prom_sistema_caja', 0)
         if tiempo_prom_caja == 0 and results.get('cajas_selladas_m3', 0) == 0:
             col3.metric("⏳ Tiempo Prom. Sistema (caja)", "N/A")
@@ -198,14 +211,40 @@ if st.sidebar.button("🚀 Ejecutar Simulación"):
                     results.get('avg_wip_buffer1', 0):.2f}")
         col3.metric("📉 WIP Prom. Buffer 2 (cajas)", f"{
                     results.get('avg_wip_buffer2', 0):.2f}")
+        
+        # Nuevas métricas de conversión
+        caramelos_buenos = results.get('caramelos_a_buffer1', 0)
+        cajas_teoricas = caramelos_buenos // 50 if caramelos_buenos > 0 else 0
+        col3.metric("🎯 Cajas Teóricamente Posibles", cajas_teoricas)
 
         st.header("📈 Visualizaciones del Sistema")
 
-        # 1. WIP a lo largo del tiempo (subplots)
-        fig_wip = make_subplots(rows=2, cols=1,
-                                subplot_titles=("Nivel de Buffer 1 (Caramelos)",
-                                                "Nivel de Buffer 2 (Cajas)"),
-                                vertical_spacing=0.1)
+        # Resumen de Estado Final del Sistema
+        st.subheader("🎯 Estado Final del Sistema")
+        col_estado1, col_estado2, col_estado3, col_estado4 = st.columns(4)
+        
+        # Estado de las colas al final
+        cola1_final = len(simulacion.cola1) if hasattr(simulacion, 'cola1') else 0
+        cola2_final = len(simulacion.cola2) if hasattr(simulacion, 'cola2') else 0
+        cola3_final = len(simulacion.cola3) if hasattr(simulacion, 'cola3') else 0
+        acumulador_final = len(simulacion.acumulador_caramelos) if hasattr(simulacion, 'acumulador_caramelos') else 0
+        
+        col_estado1.metric("🔄 Cola 1 (Caramelos → M1)", cola1_final)
+        col_estado2.metric("📦 Cola 2 (Cajas → M2)", cola2_final)
+        col_estado3.metric("🏷️ Cola 3 (Cajas → M3)", cola3_final)
+        col_estado4.metric("🧮 Acumulador Caramelos", acumulador_final)
+        
+        # Estados de las máquinas al final
+        if hasattr(simulacion, 'estado_m1'):
+            estados_finales = f"M1: {simulacion.estado_m1.value} | M2: {simulacion.estado_m2.value} | M3: {simulacion.estado_m3.value}"
+            st.info(f"**Estados Finales de Máquinas:** {estados_finales}")
+
+        # 1. WIP y Acumulador a lo largo del tiempo (3 subplots)
+        fig_wip = make_subplots(rows=3, cols=1,
+                                subplot_titles=("Nivel de Buffer 1 (Caramelos esperando M1)",
+                                                "Nivel de Buffer 2 (Cajas esperando M2)",
+                                                "Acumulador de Caramelos (para formar cajas)"),
+                                vertical_spacing=0.08)
 
         wip_b1_data = results.get('wip_buffer1_data', [])
         if wip_b1_data:
@@ -216,7 +255,7 @@ if st.sidebar.button("🚀 Ejecutar Simulación"):
                 row=1, col=1
             )
             fig_wip.update_yaxes(
-                title_text="Cantidad de Caramelos", row=1, col=1)
+                title_text="Caramelos", row=1, col=1)
 
         wip_b2_data = results.get('wip_buffer2_data', [])
         if wip_b2_data:
@@ -226,11 +265,69 @@ if st.sidebar.button("🚀 Ejecutar Simulación"):
                            name='Buffer 2', line=dict(color='green')),
                 row=2, col=1
             )
-            fig_wip.update_yaxes(title_text="Cantidad de Cajas", row=2, col=1)
+            fig_wip.update_yaxes(title_text="Cajas", row=2, col=1)
 
-        fig_wip.update_xaxes(title_text="Tiempo (minutos)", row=2, col=1)
-        fig_wip.update_layout(height=600, showlegend=True)
+        # Nueva gráfica del acumulador
+        acumulador_data = results.get('acumulador_caramelos_data', [])
+        if acumulador_data:
+            df_acumulador = pd.DataFrame(acumulador_data, columns=['Tiempo', 'Nivel'])
+            fig_wip.add_trace(
+                go.Scatter(x=df_acumulador['Tiempo'], y=df_acumulador['Nivel'],
+                           name='Acumulador', line=dict(color='orange')),
+                row=3, col=1
+            )
+            fig_wip.update_yaxes(title_text="Caramelos", row=3, col=1)
+            
+            # Línea horizontal en y=50 para mostrar el límite para formar caja
+            fig_wip.add_hline(y=50, line_dash="dash", line_color="red", 
+                             annotation_text="Límite para formar caja (50)", row=3, col=1)
+
+        fig_wip.update_xaxes(title_text="Tiempo (minutos)", row=3, col=1)
+        fig_wip.update_layout(height=800, showlegend=True)
         st.plotly_chart(fig_wip, use_container_width=True)
+
+        # Nueva visualización: Flujo de Conversión de Unidades
+        st.subheader("🔄 Flujo de Conversión: Caramelos → Cajas")
+        
+        # Crear diagrama de flujo con métricas
+        col_flujo1, col_flujo2, col_flujo3, col_flujo4 = st.columns(4)
+        
+        caramelos_producidos = results.get('producidos_m1', 0)
+        caramelos_defectuosos = results.get('defectos_m1', 0)
+        caramelos_buenos = results.get('caramelos_a_buffer1', 0)
+        cajas_empaquetadas = results.get('cajas_empaquetadas_m2', 0)
+        cajas_selladas = results.get('cajas_selladas_m3', 0)
+        
+        # Calcular caramelos utilizados en cajas (incluyendo las que están en cola2)
+        cajas_totales_formadas = cajas_empaquetadas + cola2_final
+        caramelos_en_cajas = cajas_totales_formadas * 50
+        
+        with col_flujo1:
+            st.metric("🏭 M1: Caramelos Producidos", caramelos_producidos)
+            if caramelos_producidos > 0:
+                st.caption(f"❌ Defectuosos: {caramelos_defectuosos} ({caramelos_defectuosos/caramelos_producidos*100:.1f}%)")
+                st.caption(f"✅ Buenos: {caramelos_buenos} ({caramelos_buenos/caramelos_producidos*100:.1f}%)")
+        
+        with col_flujo2:
+            st.metric("📦 Formación de Cajas", f"{cajas_totales_formadas}")
+            st.caption(f"🧮 Caramelos utilizados: {caramelos_en_cajas}")
+            st.caption(f"⏳ Caramelos pendientes: {acumulador_final}")
+        
+        with col_flujo3:
+            st.metric("🏭 M2: Cajas Empaquetadas", cajas_empaquetadas)
+            if cola2_final > 0:
+                st.caption(f"⏳ En cola M2: {cola2_final}")
+        
+        with col_flujo4:
+            st.metric("🏭 M3: Cajas Selladas", cajas_selladas)
+            if cola3_final > 0:
+                st.caption(f"⏳ En cola M3: {cola3_final}")
+        
+        # Verificación de balance
+        if caramelos_buenos > 0:
+            balance_ok = (caramelos_en_cajas + acumulador_final) == caramelos_buenos
+            balance_text = "✅ Balance Correcto" if balance_ok else "❌ Error en Balance"
+            st.info(f"**Verificación de Conservación:** {balance_text} - Total caramelos buenos: {caramelos_buenos} = En cajas: {caramelos_en_cajas} + En acumulador: {acumulador_final}")
 
         # --- GRÁFICAS REINCORPORADAS ---
 

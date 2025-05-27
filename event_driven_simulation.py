@@ -27,6 +27,20 @@ class Item:
 
 
 @dataclass
+class Caja:
+    """Representa una caja que contiene caramelos."""
+    caramelos: int = 0  # Cantidad de caramelos en la caja (máximo 50)
+    tiempo_creacion: float = 0.0
+    tiempo_llegada_cola_actual: float = 0.0
+    caramelos_items: list = None  # Lista de items de caramelos
+    id: int = 0  # Identificador único de la caja
+
+    def __post_init__(self):
+        if self.caramelos_items is None:
+            self.caramelos_items = []
+
+
+@dataclass
 class Evento:
     tiempo: float
     tipo: str
@@ -72,9 +86,14 @@ class SimulacionLineaProduccion:
         # Estado de la simulación
         self.reloj = 0.0
         self.eventos = []  # Lista priorizada de eventos
-        self.cola1 = deque()  # FIFO para items esperando en M1
-        self.cola2 = deque()  # FIFO para items esperando en M2
-        self.cola3 = deque()  # FIFO para items esperando en M3
+        self.cola1 = deque()  # FIFO para caramelos esperando en M1
+        self.cola2 = deque()  # FIFO para cajas esperando en M2
+        self.cola3 = deque()  # FIFO para cajas esperando en M3
+
+        # NUEVO: Acumulador de caramelos para formar cajas
+        self.acumulador_caramelos = []  # Lista de caramelos esperando formar caja
+        self.caramelos_por_caja = 50  # Constante
+        self.contador_cajas = 0  # Para IDs únicos de cajas
 
         # Estado de las máquinas
         self.estado_m1 = EstadoMaquina.OCIOSA
@@ -83,19 +102,20 @@ class SimulacionLineaProduccion:
 
         # Items en proceso
         self.item_en_m1: Optional[Item] = None
-        self.item_en_m2: Optional[Item] = None
-        self.item_en_m3: Optional[Item] = None
+        self.item_en_m2: Optional[Caja] = None  # Ahora procesa cajas
+        self.item_en_m3: Optional[Caja] = None  # Ahora procesa cajas
 
         # Estadísticas
         self.stats = {
             "producidos_m1": 0,
             "defectos_m1": 0,
-            "caramelos_a_buffer1": 0,
+            "caramelos_a_buffer1": 0,  # Caramelos no defectuosos producidos por M1
             "cajas_empaquetadas_m2": 0,
             "cajas_selladas_m3": 0,
             "tiempos_sistema_caja": [],
-            "wip_buffer1_data": [(0, 0)],  # (tiempo, nivel)
-            "wip_buffer2_data": [(0, 0)],  # (tiempo, nivel)
+            "wip_buffer1_data": [(0, 0)],  # (tiempo, nivel) - cola1
+            "wip_buffer2_data": [(0, 0)],  # (tiempo, nivel) - cola2
+            "acumulador_caramelos_data": [(0, 0)],  # (tiempo, cantidad) - acumulador
             "acum_tiempo_cola1": 0.0,
             "acum_tiempo_cola2": 0.0,
             "acum_tiempo_cola3": 0.0,
@@ -111,6 +131,8 @@ class SimulacionLineaProduccion:
             "estado_maquinas_tiempo": [],
             # NUEVO: [(tiempo, len(cola1), len(cola2), len(cola3))]
             "niveles_colas_tiempo": [],
+            # NUEVO: [(tiempo, len(acumulador_caramelos))]
+            "acumulador_caramelos_data": [(0, 0)],
         }
 
         # Generador de números aleatorios
@@ -118,11 +140,21 @@ class SimulacionLineaProduccion:
 
     def _inicializar_rng(self, seed: int):
         """Inicializa el generador de números aleatorios."""
-        # Si tienes ValidatedRandom, reemplaza la siguiente línea:
-        # Ejemplo: self.rng = ValidatedRandom(seed)
-        # Por ahora, se usa el generador estándar de Python:
-        rng_instance = ValidatedRandom(seed)
-        return rng_instance
+        # TEMPORAL: Usar generador estándar de Python para debugging
+        import random
+        random.seed(seed)
+        
+        class SimpleRandom:
+            def random(self):
+                return random.random()
+            def gauss(self, mu, sigma):
+                return random.gauss(mu, sigma)
+        
+        return SimpleRandom()
+        
+        # ORIGINAL (comentado temporalmente):
+        # rng_instance = ValidatedRandom(seed)
+        # return rng_instance
 
     def _generar_tiempo_exponencial(self, media: float) -> float:
         """Genera un tiempo con distribución exponencial.
@@ -141,19 +173,18 @@ class SimulacionLineaProduccion:
     def _actualizar_wip(self):
         """Actualiza las estadísticas de WIP."""
         tiempo_actual = self.reloj
-        # tiempo_desde_ultimo = tiempo_actual - self.stats['ultimo_cambio_wip'] # No usado actualmente
 
-        # Actualizar WIP Buffer 1
+        # Actualizar WIP Buffer 1 (cola1 - caramelos esperando M1)
         wip1_actual = len(self.cola1)
-        # La lógica original sumaba +1 si M1 estaba procesando,
-        # pero los buffers suelen medir solo lo que está en cola.
-        # Ajustar según la definición deseada de WIP.
-        # Por ahora, se mantiene la lógica de cola.
         self.stats["wip_buffer1_data"].append((tiempo_actual, wip1_actual))
 
-        # Actualizar WIP Buffer 2
+        # Actualizar WIP Buffer 2 (cola2 - cajas esperando M2)
         wip2_actual = len(self.cola2)
         self.stats["wip_buffer2_data"].append((tiempo_actual, wip2_actual))
+
+        # Actualizar Acumulador de Caramelos
+        acumulador_actual = len(self.acumulador_caramelos)
+        self.stats["acumulador_caramelos_data"].append((tiempo_actual, acumulador_actual))
 
         self.stats["ultimo_cambio_wip"] = tiempo_actual
 
@@ -176,6 +207,69 @@ class SimulacionLineaProduccion:
             (self.reloj, len(self.cola1), len(self.cola2), len(self.cola3))
         )
 
+    def _formar_caja(self):
+        """Forma una caja con 50 caramelos y la envía a cola2 si hay espacio."""
+        if len(self.acumulador_caramelos) < self.caramelos_por_caja:
+            return
+        
+        # Verificar si hay espacio en cola2 antes de formar la caja
+        if len(self.cola2) >= self.buffer2_capacity:
+            # No se puede formar caja porque cola2 está llena
+            # M1 debe bloquearse si intenta producir más caramelos
+            return False
+        
+        # Tomar 50 caramelos del acumulador
+        caramelos_para_caja = self.acumulador_caramelos[:self.caramelos_por_caja]
+        self.acumulador_caramelos = self.acumulador_caramelos[self.caramelos_por_caja:]
+        
+        # Crear la caja
+        nueva_caja = Caja(
+            caramelos=self.caramelos_por_caja,
+            tiempo_creacion=self.reloj,
+            tiempo_llegada_cola_actual=self.reloj,
+            caramelos_items=caramelos_para_caja,
+            id=self.contador_cajas
+        )
+        self.contador_cajas += 1
+        
+        # Agregar a cola2
+        self.cola2.append(nueva_caja)
+        self._actualizar_wip()
+        
+        # Si M2 está ociosa, iniciar procesamiento
+        if self.estado_m2 in [EstadoMaquina.OCIOSA, EstadoMaquina.INACTIVA_SIN_ENTRADA]:
+            self._iniciar_proceso_m2()
+        
+        return True
+
+    def _iniciar_proceso_m2(self):
+        """Inicia el proceso en M2 si hay cajas disponibles."""
+        if len(self.cola2) > 0 and self.estado_m2 != EstadoMaquina.PROCESANDO:
+            caja_para_procesar = self.cola2.popleft()
+            self.item_en_m2 = caja_para_procesar
+            self.estado_m2 = EstadoMaquina.PROCESANDO
+            tiempo_proceso = self._generar_tiempo_normal(
+                self.m2_media_tiempo, self.m2_std_dev_tiempo
+            )
+            self._programar_evento(
+                self.reloj + tiempo_proceso, "FIN_PROCESO_MAQUINA2"
+            )
+            self._actualizar_wip()
+
+    def _iniciar_proceso_m3(self):
+        """Inicia el proceso en M3 si hay cajas disponibles."""
+        if len(self.cola3) > 0 and self.estado_m3 != EstadoMaquina.PROCESANDO:
+            caja_para_sellar = self.cola3.popleft()
+            self.item_en_m3 = caja_para_sellar
+            self.estado_m3 = EstadoMaquina.PROCESANDO
+            tiempo_proceso = self._generar_tiempo_normal(
+                self.m3_media_tiempo, self.m3_std_dev_tiempo
+            )
+            self._programar_evento(
+                self.reloj + tiempo_proceso, "FIN_PROCESO_MAQUINA3"
+            )
+            # Nota: _actualizar_wip no rastrea cola3 actualmente
+
     def _manejar_llegada_item_cola1(self):
         """Maneja la llegada de un nuevo item a la cola 1."""
         # Programar próxima llegada (asumiendo llegadas exponenciales por ahora)
@@ -197,8 +291,7 @@ class SimulacionLineaProduccion:
 
         if (
             self.estado_m1 == EstadoMaquina.OCIOSA
-            and len(self.cola2) < self.buffer2_capacity
-        ):  # Asumiendo que M1 alimenta cola2 directamente (lógica actual)
+        ):  # M1 puede procesar si está ociosa
             self.item_en_m1 = nuevo_item
             self.estado_m1 = EstadoMaquina.PROCESANDO
             tiempo_proceso = self._generar_tiempo_normal(
@@ -230,46 +323,29 @@ class SimulacionLineaProduccion:
         self.stats["producidos_m1"] += 1
 
         # Verificar si el item es defectuoso
-        if (
-            self.rng.random() >= self.defect_prob
-        ):  # Corrección: random() < prob es para evento que ocurre
-            item_procesado.defectuoso = False
-            self.stats["caramelos_a_buffer1"] += 1
-
-            if len(self.cola2) < self.buffer2_capacity:
-                item_procesado.tiempo_llegada_cola_actual = self.reloj
-                self.cola2.append(item_procesado)
-                self._actualizar_wip()
-
-                if (
-                    self.estado_m2
-                    in [EstadoMaquina.OCIOSA, EstadoMaquina.INACTIVA_SIN_ENTRADA]
-                    and len(self.cola2) > 0
-                ):
-                    item_para_m2 = self.cola2.popleft()
-                    self.item_en_m2 = item_para_m2
-                    self.estado_m2 = EstadoMaquina.PROCESANDO
-                    tiempo_proceso = self._generar_tiempo_normal(
-                        self.m2_media_tiempo, self.m2_std_dev_tiempo
-                    )
-                    self._programar_evento(
-                        self.reloj + tiempo_proceso, "FIN_PROCESO_MAQUINA2"
-                    )
-                    self._actualizar_wip()  # WIP de cola2 cambia
-
-            else:  # Cola2 llena, M1 se bloquea
-                self.estado_m1 = EstadoMaquina.BLOQUEADA
-                self.item_en_m1 = item_procesado  # M1 retiene el item
-                # No se añade a cola1, ya que M1 lo tiene
-                return  # No intentar tomar más de cola1 si M1 está bloqueada
-
-        else:  # Item defectuoso
+        if self.rng.random() < self.defect_prob:  # CORREGIDO: random() < prob para que ocurra el defecto
+            # Item defectuoso
             item_procesado.defectuoso = True
             self.stats["defectos_m1"] += 1
             self.stats["defectos_m1_tiempo"].append(
                 (self.reloj, self.stats["defectos_m1"])
             )
-            # El item defectuoso simplemente desaparece del sistema por ahora
+        else:
+            # Item NO defectuoso
+            item_procesado.defectuoso = False
+            self.stats["caramelos_a_buffer1"] += 1
+            
+            # NUEVO: Agregar caramelo al acumulador
+            self.acumulador_caramelos.append(item_procesado)
+            
+            # NUEVO: Verificar si se puede formar una caja
+            if len(self.acumulador_caramelos) >= self.caramelos_por_caja:
+                caja_formada = self._formar_caja()
+                if not caja_formada:
+                    # M1 se bloquea porque no puede formar caja (cola2 llena)
+                    self.estado_m1 = EstadoMaquina.BLOQUEADA
+                    self._registrar_estados()
+                    return
 
         # Intentar procesar el siguiente item de cola1, solo si M1 no está bloqueada
         if self.estado_m1 != EstadoMaquina.BLOQUEADA:
@@ -290,146 +366,82 @@ class SimulacionLineaProduccion:
         self._registrar_estados()
 
     def _manejar_fin_proceso_maquina2(self):
-        """Maneja el fin del procesamiento en M2."""
-        item_procesado = self.item_en_m2
+        """Maneja el fin del procesamiento en M2 (empaquetado de caja)."""
+        caja_empaquetada = self.item_en_m2  # Ahora es tipo Caja
         self.item_en_m2 = None
         self.stats["cajas_empaquetadas_m2"] += 1
 
-        # Asumiendo que cola3 es el buffer antes de M3 y tiene una capacidad (no definida en __init__ aún)
-        # Por ahora, usaré self.buffer2_capacity para cola3 como un placeholder,
-        # idealmente debería ser self.buffer3_capacity
-        # Si no hay buffer3_capacity, podemos asumir que es ilimitada o usar una existente.
-        # Por consistencia con el código original que usa buffer2_capacity para cola3:
-        buffer3_simulated_capacity = self.buffer2_capacity  # Placeholder
-
-        if len(self.cola3) < buffer3_simulated_capacity:
-            item_procesado.tiempo_llegada_cola_actual = self.reloj
-            self.cola3.append(item_procesado)
-            # self._actualizar_wip() # Necesitaría wip_buffer3_data
-
-            if (
-                self.estado_m3
-                in [EstadoMaquina.OCIOSA, EstadoMaquina.INACTIVA_SIN_ENTRADA]
-                and len(self.cola3) > 0
-            ):
-                item_para_m3 = self.cola3.popleft()
-                self.item_en_m3 = item_para_m3
-                self.estado_m3 = EstadoMaquina.PROCESANDO
-                tiempo_proceso = self._generar_tiempo_normal(
-                    self.m3_media_tiempo, self.m3_std_dev_tiempo
-                )
-                self._programar_evento(
-                    self.reloj + tiempo_proceso, "FIN_PROCESO_MAQUINA3"
-                )
-                # self._actualizar_wip() # WIP de cola3 cambia
-        else:  # Cola3 llena, M2 se bloquea
+        # La caja empaquetada va a cola3 (buffer para M3)
+        buffer3_capacity = self.buffer2_capacity  # Usar misma capacidad por simplicidad
+        if len(self.cola3) < buffer3_capacity:
+            caja_empaquetada.tiempo_llegada_cola_actual = self.reloj
+            self.cola3.append(caja_empaquetada)
+            
+            # Si M3 está ociosa, iniciar procesamiento
+            if self.estado_m3 in [EstadoMaquina.OCIOSA, EstadoMaquina.INACTIVA_SIN_ENTRADA]:
+                self._iniciar_proceso_m3()
+        else:
+            # M2 se bloquea
             self.estado_m2 = EstadoMaquina.BLOQUEADA
-            self.item_en_m2 = item_procesado  # M2 retiene el item
-            # No intentar tomar más de cola2 si M2 está bloqueada
+            self.item_en_m2 = caja_empaquetada
+            return
 
-        # Intentar procesar el siguiente item de cola2, solo si M2 no está bloqueada
-        if self.estado_m2 != EstadoMaquina.BLOQUEADA:
-            if len(self.cola2) > 0:
-                item_de_cola2 = self.cola2.popleft()
-                self.item_en_m2 = item_de_cola2
-                self.estado_m2 = EstadoMaquina.PROCESANDO
-                tiempo_proceso = self._generar_tiempo_normal(
-                    self.m2_media_tiempo, self.m2_std_dev_tiempo
-                )
-                self._programar_evento(
-                    self.reloj + tiempo_proceso, "FIN_PROCESO_MAQUINA2"
-                )
-                self._actualizar_wip()  # WIP de cola2 cambia
-            else:
-                self.estado_m2 = (
-                    EstadoMaquina.INACTIVA_SIN_ENTRADA
-                )  # OCIOSA si no hay distinción
-
-        # Comprobar si M1 estaba bloqueada y ahora hay espacio en cola2
-        if (
-            self.estado_m1 == EstadoMaquina.BLOQUEADA
-            and len(self.cola2) < self.buffer2_capacity
-        ):
-            item_bloqueado_m1 = (
-                self.item_en_m1
-            )  # Este es el item que M1 no pudo poner en cola2
-            self.item_en_m1 = None  # M1 ya no lo tiene
-
-            item_bloqueado_m1.tiempo_llegada_cola_actual = self.reloj
-            self.cola2.append(item_bloqueado_m1)  # Ponerlo en cola2
-            self._actualizar_wip()  # WIP de cola2 cambia
-
-            # M1 ahora está ociosa y puede intentar tomar de cola1
-            self.estado_m1 = EstadoMaquina.OCIOSA
-            if len(self.cola1) > 0:
-                item_de_cola1 = self.cola1.popleft()
-                self.item_en_m1 = item_de_cola1
-                self.estado_m1 = EstadoMaquina.PROCESANDO
-                tiempo_proceso_m1 = self._generar_tiempo_normal(
-                    self.m1_media_tiempo, self.m1_std_dev_tiempo
-                )
-                self._programar_evento(
-                    self.reloj + tiempo_proceso_m1, "FIN_PROCESO_MAQUINA1"
-                )
-                self._actualizar_wip()  # WIP de cola1 cambia
-            # else: M1 queda OCIOSA
+        # Intentar procesar siguiente caja de cola2
+        self._iniciar_proceso_m2()
+        
+        # Verificar si M1 puede desbloquearse y formar más cajas
+        if self.estado_m1 == EstadoMaquina.BLOQUEADA:
+            if len(self.acumulador_caramelos) >= self.caramelos_por_caja:
+                caja_formada = self._formar_caja()
+                if caja_formada:
+                    # M1 se desbloquea
+                    self.estado_m1 = EstadoMaquina.OCIOSA
+                    # Intentar procesar siguiente item de cola1
+                    if len(self.cola1) > 0:
+                        item_de_cola1 = self.cola1.popleft()
+                        self.item_en_m1 = item_de_cola1
+                        self.estado_m1 = EstadoMaquina.PROCESANDO
+                        tiempo_proceso = self._generar_tiempo_normal(
+                            self.m1_media_tiempo, self.m1_std_dev_tiempo
+                        )
+                        self._programar_evento(
+                            self.reloj + tiempo_proceso, "FIN_PROCESO_MAQUINA1"
+                        )
+                        self._actualizar_wip()
 
         self._registrar_estados()
 
     def _manejar_fin_proceso_maquina3(self):
-        """Maneja el fin del procesamiento en M3."""
-        item_terminado = self.item_en_m3
+        """Maneja el fin del procesamiento en M3 (sellado de caja)."""
+        caja_sellada = self.item_en_m3
         self.item_en_m3 = None
         self.stats["cajas_selladas_m3"] += 1
 
-        tiempo_en_sistema = self.reloj - item_terminado.tiempo_llegada_sistema
+        # Calcular tiempo en sistema basado en el primer caramelo de la caja
+        primer_caramelo = caja_sellada.caramelos_items[0]
+        tiempo_en_sistema = self.reloj - primer_caramelo.tiempo_llegada_sistema
         self.stats["tiempos_sistema_caja"].append(tiempo_en_sistema)
         self.stats["cajas_selladas_m3_tiempo"].append(
             (self.reloj, self.stats["cajas_selladas_m3"])
         )
 
-        # Intentar procesar otro item de cola3
-        if len(self.cola3) > 0:
-            item_de_cola3 = self.cola3.popleft()
-            self.item_en_m3 = item_de_cola3
-            self.estado_m3 = EstadoMaquina.PROCESANDO
-            tiempo_proceso = self._generar_tiempo_normal(
-                self.m3_media_tiempo, self.m3_std_dev_tiempo
-            )
-            self._programar_evento(
-                self.reloj + tiempo_proceso, "FIN_PROCESO_MAQUINA3")
-            # self._actualizar_wip() # Si se mide wip_buffer3_data
-        else:
-            self.estado_m3 = EstadoMaquina.INACTIVA_SIN_ENTRADA  # O OCIOSA
-
-        # Comprobar si M2 estaba bloqueada y ahora hay espacio en cola3
-        # Usando buffer3_simulated_capacity de nuevo
-        buffer3_simulated_capacity = self.buffer2_capacity  # Placeholder
+        # Intentar procesar siguiente caja de cola3
+        self._iniciar_proceso_m3()
+        
+        # Verificar si M2 puede desbloquearse
+        buffer3_capacity = self.buffer2_capacity
         if (
             self.estado_m2 == EstadoMaquina.BLOQUEADA
-            and len(self.cola3) < buffer3_simulated_capacity
+            and len(self.cola3) < buffer3_capacity
         ):
-            item_bloqueado_m2 = self.item_en_m2
+            caja_bloqueada_m2 = self.item_en_m2
             self.item_en_m2 = None
 
-            item_bloqueado_m2.tiempo_llegada_cola_actual = self.reloj
-            self.cola3.append(item_bloqueado_m2)
-            # self._actualizar_wip() # Si se mide wip_buffer3_data
+            caja_bloqueada_m2.tiempo_llegada_cola_actual = self.reloj
+            self.cola3.append(caja_bloqueada_m2)
 
-            self.estado_m2 = EstadoMaquina.OCIOSA  # M2 ahora está ociosa
-            if len(self.cola2) > 0:
-                item_de_cola2 = self.cola2.popleft()
-                self.item_en_m2 = item_de_cola2
-                self.estado_m2 = EstadoMaquina.PROCESANDO
-                tiempo_proceso_m2 = self._generar_tiempo_normal(
-                    self.m2_media_tiempo, self.m2_std_dev_tiempo
-                )
-                self._programar_evento(
-                    self.reloj + tiempo_proceso_m2, "FIN_PROCESO_MAQUINA2"
-                )
-                self._actualizar_wip()  # WIP de cola2 cambia
-            else:
-                self.estado_m2 = EstadoMaquina.INACTIVA_SIN_ENTRADA
+            self.estado_m2 = EstadoMaquina.OCIOSA
+            self._iniciar_proceso_m2()
 
         self._registrar_estados()
 
