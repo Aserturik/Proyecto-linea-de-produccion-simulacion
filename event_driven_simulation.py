@@ -54,11 +54,11 @@ class SimulacionLineaProduccion:
         sim_time: float,
         buffer1_capacity: int,
         buffer2_capacity: int,
-        m1_media_tiempo: float,  # Renombrado/reutilizado para claridad
+        m1_media_tiempo: float,
         m1_std_dev_tiempo: float,
-        m2_media_tiempo: float,  # Renombrado/reutilizado para claridad
+        m2_media_tiempo: float,
         m2_std_dev_tiempo: float,
-        m3_media_tiempo: float,  # Renombrado/reutilizado para claridad
+        m3_media_tiempo: float,
         m3_std_dev_tiempo: float,
         defect_prob: float,
         random_seed: int,
@@ -369,22 +369,16 @@ class SimulacionLineaProduccion:
         """Maneja el fin del procesamiento en M2 (empaquetado de caja)."""
         caja_empaquetada = self.item_en_m2  # Ahora es tipo Caja
         self.item_en_m2 = None
+        self.estado_m2 = EstadoMaquina.OCIOSA # Establecer M2 a OCIOSA
         self.stats["cajas_empaquetadas_m2"] += 1
 
         # La caja empaquetada va a cola3 (buffer para M3)
-        buffer3_capacity = self.buffer2_capacity  # Usar misma capacidad por simplicidad
-        if len(self.cola3) < buffer3_capacity:
-            caja_empaquetada.tiempo_llegada_cola_actual = self.reloj
-            self.cola3.append(caja_empaquetada)
-            
-            # Si M3 está ociosa, iniciar procesamiento
-            if self.estado_m3 in [EstadoMaquina.OCIOSA, EstadoMaquina.INACTIVA_SIN_ENTRADA]:
-                self._iniciar_proceso_m3()
-        else:
-            # M2 se bloquea
-            self.estado_m2 = EstadoMaquina.BLOQUEADA
-            self.item_en_m2 = caja_empaquetada
-            return
+        caja_empaquetada.tiempo_llegada_cola_actual = self.reloj
+        self.cola3.append(caja_empaquetada)
+        
+        # Si M3 está ociosa, iniciar procesamiento
+        if self.estado_m3 in [EstadoMaquina.OCIOSA, EstadoMaquina.INACTIVA_SIN_ENTRADA]:
+            self._iniciar_proceso_m3()
 
         # Intentar procesar siguiente caja de cola2
         self._iniciar_proceso_m2()
@@ -415,6 +409,7 @@ class SimulacionLineaProduccion:
         """Maneja el fin del procesamiento en M3 (sellado de caja)."""
         caja_sellada = self.item_en_m3
         self.item_en_m3 = None
+        self.estado_m3 = EstadoMaquina.OCIOSA # Establecer M3 a OCIOSA
         self.stats["cajas_selladas_m3"] += 1
 
         # Calcular tiempo en sistema basado en el primer caramelo de la caja
