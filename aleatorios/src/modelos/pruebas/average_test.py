@@ -54,6 +54,19 @@ class AverageTest:
         self.compute_upper_limit()
         self.compute_lower_limit()
         self.passed = self.lower_limit <= self.average <= self.upper_limit
+        return self.passed  # Agregar return
+    
+    def get_average(self):
+        """Retorna el promedio calculado."""
+        return self.average
+    
+    def get_lower_limit(self):
+        """Retorna el límite inferior."""
+        return self.lower_limit
+    
+    def get_upper_limit(self):
+        """Retorna el límite superior."""
+        return self.upper_limit
 
     # Reinicia los valores de la prueba a sus valores iniciales
     def reset(self):

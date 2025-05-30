@@ -51,8 +51,8 @@ class LinearCongruenceRandom(PRNG):
         if self._x < 0:
             self._x += self.m
         
-        # Normalización mejorada para mejor distribución de dígitos decimales
-        return self._x / (self.m - 1)  # Usar m-1 para incluir posibilidad de 1.0
+        # Normalización CORRECTA para distribución uniforme [0,1)
+        return self._x / self.m  # NO dividir por (m-1)
 
     def seed(self, value: int) -> None:
         """Establece una nueva semilla para el generador."""
