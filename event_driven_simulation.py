@@ -86,6 +86,7 @@ class SimulacionLineaProduccion:
         # Estado de la simulación
         self.reloj = 0.0
         self.eventos = []  # Lista priorizada de eventos
+        self.contador_eventos = 0  # Contador único para desempatar eventos con el mismo tiempo
         self.cola1 = deque()  # FIFO para caramelos esperando en M1
         self.cola2 = deque()  # FIFO para cajas esperando en M2
         self.cola3 = deque()  # FIFO para cajas esperando en M3
@@ -191,7 +192,10 @@ class SimulacionLineaProduccion:
     def _programar_evento(self, tiempo: float, tipo: str, data: Any = None):
         """Programa un nuevo evento en la lista de eventos."""
         evento = Evento(tiempo, tipo, data)
-        heapq.heappush(self.eventos, (tiempo, evento))
+        # Usar una tupla de 3 elementos: (tiempo, contador_unico, evento)
+        # Esto garantiza que nunca haya empates que requieran comparar objetos Evento
+        heapq.heappush(self.eventos, (tiempo, self.contador_eventos, evento))
+        self.contador_eventos += 1
 
     def _registrar_estados(self):
         """Registra el estado de las máquinas y los niveles de las colas en el tiempo actual."""
@@ -448,7 +452,7 @@ class SimulacionLineaProduccion:
         self._programar_evento(0.0, "LLEGADA_ITEM_COLA1")
 
         while self.reloj < self.sim_time and self.eventos:
-            tiempo_evento, evento_actual = heapq.heappop(self.eventos)
+            tiempo_evento, _, evento_actual = heapq.heappop(self.eventos)
 
             if (
                 tiempo_evento > self.sim_time
