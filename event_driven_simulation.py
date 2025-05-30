@@ -141,17 +141,22 @@ class SimulacionLineaProduccion:
 
     def _inicializar_rng(self, seed: int):
         """Inicializa el generador de números aleatorios."""
-        # TEMPORAL: Usar generador estándar de Python para debugging
-        import random
-        random.seed(seed)
         
         class SimpleRandom:
+            def __init__(self, seed):
+                try:
+                    self.rng = ValidatedRandom(seed = seed, batch_size= 1000, max_attempts=5) 
+                    print(f"usando la semilla: {seed}")
+                except Exception as e:
+                    print(f"Error al inicializar el generador de números aleatorios: {e}")
+
             def random(self):
-                return random.random()
+                return self.rng.random()
+            
             def gauss(self, mu, sigma):
-                return random.gauss(mu, sigma)
+                return self.rng.gauss(mu, sigma)
         
-        return SimpleRandom()
+        return SimpleRandom(seed)
         
         # ORIGINAL (comentado temporalmente):
         # rng_instance = ValidatedRandom(seed)
