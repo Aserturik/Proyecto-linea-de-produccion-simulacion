@@ -62,6 +62,7 @@ class SimulacionLineaProduccion:
         m3_std_dev_tiempo: float,
         defect_prob: float,
         random_seed: int,
+        tiempo_entre_llegadas: float = 2.0,  # NUEVO: Parámetro configurable
     ):
 
         # Parámetros de simulación
@@ -82,6 +83,9 @@ class SimulacionLineaProduccion:
         self.m3_std_dev_tiempo = m3_std_dev_tiempo
 
         self.defect_prob = defect_prob
+        
+        # NUEVO: Parámetro de tiempo entre llegadas
+        self.tiempo_entre_llegadas = tiempo_entre_llegadas
 
         # Estado de la simulación
         self.reloj = 0.0
@@ -281,12 +285,9 @@ class SimulacionLineaProduccion:
 
     def _manejar_llegada_item_cola1(self):
         """Maneja la llegada de un nuevo item a la cola 1."""
-        # Programar próxima llegada (asumiendo llegadas exponenciales por ahora)
-        # Si las llegadas también deben ser normales, este método necesitará parámetros de media y std_dev
-        # Ejemplo, este parámetro debería venir del constructor si se generaliza
-        media_tiempo_llegada = 2.0
+        # Programar próxima llegada usando el parámetro configurable
         tiempo_entre_llegadas = self._generar_tiempo_exponencial(
-            media_tiempo_llegada)
+            self.tiempo_entre_llegadas)
         self._programar_evento(
             self.reloj + tiempo_entre_llegadas, "LLEGADA_ITEM_COLA1")
 

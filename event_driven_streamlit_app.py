@@ -10,14 +10,15 @@ from event_driven_simulation import SimulacionLineaProduccion
 DEFAULT_SIM_TIME = 24 * 60  # 24 horas en minutos
 DEFAULT_BUFFER1_CAPACITY = 1000 * 50
 DEFAULT_BUFFER2_CAPACITY = 1000
+DEFAULT_TIEMPO_ENTRE_LLEGADAS = 1.0  # NUEVO: 1 minuto entre llegadas
 
 # Parámetros para Distribución Normal por defecto
-DEFAULT_M1_MEDIA_TIEMPO = 2.0  # minutos por caramelo
-DEFAULT_M1_STD_DEV_TIEMPO = 0.5  # minutos
-DEFAULT_M2_MEDIA_TIEMPO = 30.0  # minutos por caja
-DEFAULT_M2_STD_DEV_TIEMPO = 5.0  # minutos
-DEFAULT_M3_MEDIA_TIEMPO = 15.0  # minutos por caja
-DEFAULT_M3_STD_DEV_TIEMPO = 3.0  # minutos
+DEFAULT_M1_MEDIA_TIEMPO = 1.0  # AJUSTADO: 1.0 minutos por caramelo (era 2.0)
+DEFAULT_M1_STD_DEV_TIEMPO = 0.2  # AJUSTADO: menor variabilidad
+DEFAULT_M2_MEDIA_TIEMPO = 1.0  # AJUSTADO: 1.0 minutos por caja (era 30.0)
+DEFAULT_M2_STD_DEV_TIEMPO = 0.2  # AJUSTADO: menor variabilidad
+DEFAULT_M3_MEDIA_TIEMPO = 1.0  # AJUSTADO: 1.0 minutos por caja (era 15.0)
+DEFAULT_M3_STD_DEV_TIEMPO = 0.2  # AJUSTADO: menor variabilidad
 
 DEFAULT_DEFECT_PROB = 0.02
 DEFAULT_RANDOM_SEED = 12345
@@ -63,6 +64,13 @@ def plot_normal_distribution(mean, std_dev, title):
 
 sim_time = st.sidebar.number_input(
     "Tiempo de Simulación (minutos)", min_value=1, value=DEFAULT_SIM_TIME, step=60)
+
+# NUEVO: Parámetro de tiempo entre llegadas
+tiempo_entre_llegadas = st.sidebar.number_input(
+    "Tiempo Promedio Entre Llegadas (min)", 
+    min_value=0.1, value=DEFAULT_TIEMPO_ENTRE_LLEGADAS, step=0.1, format="%.2f",
+    help="Tiempo promedio entre llegadas de nuevos items a la cola 1 (distribución exponencial)")
+
 buffer1_capacity = st.sidebar.number_input(
     "Capacidad Buffer 1 (caramelos)", min_value=1, value=DEFAULT_BUFFER1_CAPACITY, step=100)
 buffer2_capacity = st.sidebar.number_input(
@@ -162,7 +170,8 @@ if st.sidebar.button("🚀 Ejecutar Simulación"):
         m3_media_tiempo=m3_media_tiempo,
         m3_std_dev_tiempo=m3_std_dev_tiempo,
         defect_prob=defect_prob,
-        random_seed=random_seed
+        random_seed=random_seed,
+        tiempo_entre_llegadas=tiempo_entre_llegadas  # NUEVO parámetro
     )
     results = simulacion.ejecutar_simulacion()
 
