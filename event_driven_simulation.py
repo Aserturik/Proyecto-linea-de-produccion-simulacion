@@ -82,7 +82,7 @@ class SimulacionLineaProduccion:
         self.m3_std_dev_tiempo = m3_std_dev_tiempo
 
         self.defect_prob = defect_prob
-        
+
         # NUEVO: Parámetro de tiempo entre llegadas
         self.tiempo_entre_llegadas = tiempo_entre_llegadas
 
@@ -119,7 +119,8 @@ class SimulacionLineaProduccion:
             "tiempos_sistema_caja": [],
             "wip_buffer1_data": [(0, 0)],  # (tiempo, nivel) - cola1
             "wip_buffer2_data": [(0, 0)],  # (tiempo, nivel) - cola2
-            "acumulador_caramelos_data": [(0, 0)],  # (tiempo, cantidad) - acumulador
+            # (tiempo, cantidad) - acumulador
+            "acumulador_caramelos_data": [(0, 0)],
             "ultimo_cambio_wip": 0.0,
             # Lista de tuplas (tiempo, acumulado de defectos)
             "defectos_m1_tiempo": [],
@@ -141,23 +142,25 @@ class SimulacionLineaProduccion:
 
     def _inicializar_rng(self, seed: int):
         """Inicializa el generador de números aleatorios."""
-        
+
         class SimpleRandom:
             def __init__(self, seed):
                 try:
-                    self.rng = ValidatedRandom(seed = seed, batch_size= 1000, max_attempts=5) 
+                    self.rng = ValidatedRandom(
+                        seed=seed, batch_size=1000, max_attempts=5)
                     print(f"usando la semilla: {seed}")
                 except Exception as e:
-                    print(f"Error al inicializar el generador de números aleatorios: {e}")
+                    print(
+                        f"Error al inicializar el generador de números aleatorios: {e}")
 
             def random(self):
                 return self.rng.random()
-            
+
             def gauss(self, mu, sigma):
                 return self.rng.gauss(mu, sigma)
-        
+
         return SimpleRandom(seed)
-        
+
         # ORIGINAL (comentado temporalmente):
         # rng_instance = ValidatedRandom(seed)
         # return rng_instance
@@ -190,7 +193,8 @@ class SimulacionLineaProduccion:
 
         # Actualizar Acumulador de Caramelos
         acumulador_actual = len(self.acumulador_caramelos)
-        self.stats["acumulador_caramelos_data"].append((tiempo_actual, acumulador_actual))
+        self.stats["acumulador_caramelos_data"].append(
+            (tiempo_actual, acumulador_actual))
 
         self.stats["ultimo_cambio_wip"] = tiempo_actual
 
@@ -220,17 +224,17 @@ class SimulacionLineaProduccion:
         """Forma una caja con 50 caramelos y la envía a cola2 si hay espacio."""
         if len(self.acumulador_caramelos) < self.caramelos_por_caja:
             return
-        
+
         # Verificar si hay espacio en cola2 antes de formar la caja
         if len(self.cola2) >= self.buffer2_capacity:
             # No se puede formar caja porque cola2 está llena
             # M1 debe bloquearse si intenta producir más caramelos
             return False
-        
+
         # Tomar 50 caramelos del acumulador
         caramelos_para_caja = self.acumulador_caramelos[:self.caramelos_por_caja]
         self.acumulador_caramelos = self.acumulador_caramelos[self.caramelos_por_caja:]
-        
+
         # Crear la caja
         nueva_caja = Caja(
             caramelos=self.caramelos_por_caja,
@@ -240,15 +244,15 @@ class SimulacionLineaProduccion:
             id=self.contador_cajas
         )
         self.contador_cajas += 1
-        
+
         # Agregar a cola2
         self.cola2.append(nueva_caja)
         self._actualizar_wip()
-        
+
         # Si M2 está ociosa, iniciar procesamiento
         if self.estado_m2 in [EstadoMaquina.OCIOSA, EstadoMaquina.INACTIVA_SIN_ENTRADA]:
             self._iniciar_proceso_m2()
-        
+
         return True
 
     def _iniciar_proceso_m2(self):
@@ -340,10 +344,10 @@ class SimulacionLineaProduccion:
             # Item NO defectuoso
             item_procesado.defectuoso = False
             self.stats["caramelos_a_buffer1"] += 1
-            
+
             # NUEVO: Agregar caramelo al acumulador
             self.acumulador_caramelos.append(item_procesado)
-            
+
             # NUEVO: Verificar si se puede formar una caja
             if len(self.acumulador_caramelos) >= self.caramelos_por_caja:
                 caja_formada = self._formar_caja()
@@ -375,20 +379,20 @@ class SimulacionLineaProduccion:
         """Maneja el fin del procesamiento en M2 (empaquetado de caja)."""
         caja_empaquetada = self.item_en_m2  # Ahora es tipo Caja
         self.item_en_m2 = None
-        self.estado_m2 = EstadoMaquina.OCIOSA # Establecer M2 a OCIOSA
+        self.estado_m2 = EstadoMaquina.OCIOSA  # Establecer M2 a OCIOSA
         self.stats["cajas_empaquetadas_m2"] += 1
 
         # La caja empaquetada va a cola3 (buffer para M3)
         caja_empaquetada.tiempo_llegada_cola_actual = self.reloj
         self.cola3.append(caja_empaquetada)
-        
+
         # Si M3 está ociosa, iniciar procesamiento
         if self.estado_m3 in [EstadoMaquina.OCIOSA, EstadoMaquina.INACTIVA_SIN_ENTRADA]:
             self._iniciar_proceso_m3()
 
         # Intentar procesar siguiente caja de cola2
         self._iniciar_proceso_m2()
-        
+
         # Verificar si M1 puede desbloquearse y formar más cajas
         if self.estado_m1 == EstadoMaquina.BLOQUEADA:
             if len(self.acumulador_caramelos) >= self.caramelos_por_caja:
@@ -415,7 +419,7 @@ class SimulacionLineaProduccion:
         """Maneja el fin del procesamiento en M3 (sellado de caja)."""
         caja_sellada = self.item_en_m3
         self.item_en_m3 = None
-        self.estado_m3 = EstadoMaquina.OCIOSA # Establecer M3 a OCIOSA
+        self.estado_m3 = EstadoMaquina.OCIOSA  # Establecer M3 a OCIOSA
         self.stats["cajas_selladas_m3"] += 1
 
         # Calcular tiempo en sistema basado en el primer caramelo de la caja
@@ -428,7 +432,7 @@ class SimulacionLineaProduccion:
 
         # Intentar procesar siguiente caja de cola3
         self._iniciar_proceso_m3()
-        
+
         # Verificar si M2 puede desbloquearse
         buffer3_capacity = self.buffer2_capacity
         if (
@@ -464,7 +468,7 @@ class SimulacionLineaProduccion:
             self.reloj = tiempo_evento
 
             if evento_actual.tipo == "LLEGADA_ITEM_COLA1":
-                self._manejar_llegada_item_cola1()
+                self._manejar_llegada_item_1()
             elif evento_actual.tipo == "FIN_PROCESO_MAQUINA1":
                 self._manejar_fin_proceso_maquina1()
             elif evento_actual.tipo == "FIN_PROCESO_MAQUINA2":
